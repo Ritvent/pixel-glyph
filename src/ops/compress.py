@@ -20,6 +20,27 @@ def _to_gray(img: np.ndarray) -> np.ndarray:
     return img if img.ndim == 2 else cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
 
+def jpeg_attack(img: np.ndarray, quality: int = 75) -> np.ndarray:
+    """Re-encode `img` as JPEG at the given quality (1-100) and decode back.
+
+    This is the strongest classical attack against LSB stego — JPEG's
+    8x8 block DCT quantization scrambles the spatial domain regardless of
+    where the bits were embedded. Even quality=100 (no chroma subsampling
+    in OpenCV's encoder) usually destroys an LSB payload because the
+    integer DCT round-trip is not bit-exact.
+    """
+    quality = int(max(1, min(100, quality)))
+    ok, buf = cv2.imencode(".jpg", img,
+                           [int(cv2.IMWRITE_JPEG_QUALITY), quality])
+    if not ok:
+        raise RuntimeError("JPEG encode failed")
+    flag = cv2.IMREAD_GRAYSCALE if img.ndim == 2 else cv2.IMREAD_COLOR
+    out = cv2.imdecode(buf, flag)
+    if out is None:
+        raise RuntimeError("JPEG decode failed")
+    return out
+
+
 def psnr(a: np.ndarray, b: np.ndarray) -> float:
     """Peak signal-to-noise ratio in dB. 'inf' if images are identical."""
     if a.shape != b.shape:

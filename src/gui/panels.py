@@ -22,8 +22,8 @@ from gui.dialogs import (
     show_histogram, show_histogram_compare, show_image, show_text,
 )
 from ops import (
-    basic, bitplanes, contrast, filters, forensics, restore, slicing,
-    stats, stego,
+    basic, bitplanes, compress, contrast, filters, forensics, restore,
+    slicing, stats, stego,
 )
 from ops import canny as canny_ops
 from ops import fft as fft_ops
@@ -267,6 +267,24 @@ class ToolPanel(ttk.Frame):
                     "median-denoise",
                 ))
 
+        _separator(parent)
+        _section(parent, "Exer 10 — Compression attacks (strongest)")
+        self.atk_jpeg_q = _slider(parent, "JPEG quality",
+                                  5, 100, 75, integer=True)
+        _button(parent, "JPEG re-encode attack",
+                lambda: self._apply(
+                    lambda im: compress.jpeg_attack(im, self.atk_jpeg_q.get()),
+                    "jpeg-attack",
+                ))
+        self.atk_dct_keep = _slider(parent,
+                                    "DCT coefs kept (fraction of 64)",
+                                    0.05, 1.0, 0.25)
+        _button(parent, "DCT compress (drop high freq)",
+                lambda: self._apply(
+                    lambda im: compress.dct_compress(im, self.atk_dct_keep.get()),
+                    "dct-attack",
+                ))
+
     # ==================================================================
     # Analyze tab — Exer 4, 7, 12
     # ==================================================================
@@ -307,6 +325,23 @@ class ToolPanel(ttk.Frame):
                                  1, 100, 50, integer=True)
         _button(parent, "Show amplified diff",
                 self._cmd_diff_amplified)
+
+        _separator(parent)
+        _section(parent, "Exer 10 — Channel capacity (cover image)")
+        ttk.Label(parent,
+                  text="How redundant is the cover? Higher redundancy = "
+                       "more theoretical hiding space.",
+                  foreground="#444", justify="left", wraplength=300
+                  ).pack(anchor="w", padx=6, pady=(0, 4))
+        _button(parent, "DPCM entropy stats",
+                self._cmd_dpcm_stats)
+        _button(parent, "Huffman coding stats",
+                self._cmd_huffman_stats)
+        self.dct_keep_stats = _slider(parent,
+                                      "DCT keep fraction (for PSNR demo)",
+                                      0.05, 1.0, 0.25)
+        _button(parent, "DCT compression stats (PSNR + ratio)",
+                self._cmd_dct_stats)
 
     # ------------------------------------------------------------------
     # Analyze tab handlers
@@ -371,6 +406,31 @@ class ToolPanel(ttk.Frame):
             return
         show_histogram_compare(self.app, s.cover, s.working,
                                label_a="Cover", label_b="Working")
+
+    def _cmd_dpcm_stats(self) -> None:
+        if self.app.state_.cover is None:
+            self.app.status.config(text="Open a cover image first.")
+            return
+        r = compress.dpcm_stats(self.app.state_.cover)
+        show_text(self.app, "DPCM entropy — cover",
+                  stats.format_stats(r))
+
+    def _cmd_huffman_stats(self) -> None:
+        if self.app.state_.cover is None:
+            self.app.status.config(text="Open a cover image first.")
+            return
+        r = compress.huffman_stats(self.app.state_.cover)
+        show_text(self.app, "Huffman coding — cover",
+                  stats.format_stats(r))
+
+    def _cmd_dct_stats(self) -> None:
+        if self.app.state_.cover is None:
+            self.app.status.config(text="Open a cover image first.")
+            return
+        r = compress.dct_stats(self.app.state_.cover,
+                               self.dct_keep_stats.get())
+        show_text(self.app, "DCT compression — cover",
+                  stats.format_stats(r))
 
     def _cmd_diff_mask(self) -> None:
         s = self.app.state_

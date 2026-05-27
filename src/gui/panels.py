@@ -21,7 +21,12 @@ import numpy as np
 from gui.dialogs import (
     show_histogram, show_histogram_compare, show_image, show_text,
 )
-from ops import basic, contrast, filters, restore, slicing, stats, stego
+from ops import (
+    basic, bitplanes, contrast, filters, forensics, restore, slicing,
+    stats, stego,
+)
+from ops import canny as canny_ops
+from ops import fft as fft_ops
 
 
 class ToolPanel(ttk.Frame):
@@ -37,6 +42,7 @@ class ToolPanel(ttk.Frame):
             ("Decode", self._build_decode),
             ("Attack", self._build_attack),
             ("Analyze", self._build_analyze),
+            ("Forensics", self._build_forensics),
         ):
             tab = _scrollable(self.nb)
             self.nb.add(tab.outer, text=label)
@@ -390,6 +396,120 @@ class ToolPanel(ttk.Frame):
             return
         show_image(self.app, d,
                    title=f"|cover - working| × {int(self.diff_gain.get())}")
+
+    # ==================================================================
+    # Forensics tab — Exer 5 deep, 2, 6, 13
+    # ==================================================================
+    def _build_forensics(self, parent: ttk.Frame) -> None:
+        _intro(parent,
+               "Analyze an UNKNOWN image to detect hidden LSB stego. "
+               "Load any image (File → Open Cover), then run these "
+               "detectors against the Working canvas.")
+
+        _section(parent, "Exer 5 — Bit-plane viewer")
+        _button(parent, "Show LSB plane (most diagnostic)",
+                self._cmd_show_lsb)
+        _button(parent, "Show all 8 bit planes (2×4 grid)",
+                self._cmd_show_bitplanes)
+        self.bp_k = _slider(parent, "Single plane (0=LSB, 7=MSB)",
+                            0, 7, 0, integer=True)
+        _button(parent, "Replace working with single bit plane",
+                lambda: self._apply(
+                    lambda im: bitplanes.bit_plane(im, self.bp_k.get()),
+                    f"bit-plane",
+                ))
+
+        _separator(parent)
+        _section(parent, "Statistical detectors")
+        _button(parent,
+                "Chi-square LSB test (Exer 4 — histogram)",
+                self._cmd_chi_square)
+        _button(parent,
+                "Neighbor-pair analysis (Exer 2 — pixel relations)",
+                self._cmd_neighbor_pair)
+
+        _separator(parent)
+        _section(parent, "Exer 6 — Frequency-domain detector")
+        _button(parent,
+                "Show FFT of LSB plane (uniform = stego)",
+                self._cmd_fft_lsb)
+
+        _separator(parent)
+        _section(parent, "Exer 13 — Canny on bit planes")
+        self.fcanny_lo = _slider(parent, "Canny low",
+                                 0, 255, 50, integer=True)
+        self.fcanny_hi = _slider(parent, "Canny high",
+                                 0, 255, 150, integer=True)
+        _button(parent, "Canny on LSB plane",
+                self._cmd_canny_lsb)
+        _button(parent, "Canny on chosen single plane",
+                self._cmd_canny_plane)
+
+    # ------------------------------------------------------------------
+    # Forensics handlers
+    # ------------------------------------------------------------------
+    def _cmd_show_lsb(self) -> None:
+        if self.app.state_.working is None:
+            self.app.status.config(text="Open an image first.")
+            return
+        lsb = forensics.lsb_plane(self.app.state_.working)
+        show_image(self.app, lsb,
+                   title="LSB plane — random-looking = likely stego")
+
+    def _cmd_show_bitplanes(self) -> None:
+        if self.app.state_.working is None:
+            self.app.status.config(text="Open an image first.")
+            return
+        grid = bitplanes.bit_planes_grid(self.app.state_.working)
+        show_image(self.app, grid,
+                   title="Bit planes (MSB → LSB, top-left to bottom-right)")
+
+    def _cmd_chi_square(self) -> None:
+        if self.app.state_.working is None:
+            self.app.status.config(text="Open an image first.")
+            return
+        r = forensics.chi_square_stego(self.app.state_.working)
+        show_text(self.app, "Chi-square LSB stego test",
+                  stats.format_stats(r))
+
+    def _cmd_neighbor_pair(self) -> None:
+        if self.app.state_.working is None:
+            self.app.status.config(text="Open an image first.")
+            return
+        r = forensics.neighbor_pair_stats(self.app.state_.working)
+        show_text(self.app, "Neighbor-pair analysis",
+                  stats.format_stats(r))
+
+    def _cmd_fft_lsb(self) -> None:
+        if self.app.state_.working is None:
+            self.app.status.config(text="Open an image first.")
+            return
+        lsb = forensics.lsb_plane(self.app.state_.working)
+        spec = fft_ops.fft_2d_magnitude(lsb)
+        show_image(self.app, spec,
+                   title="FFT of LSB plane — bright/uniform = likely stego")
+
+    def _cmd_canny_lsb(self) -> None:
+        if self.app.state_.working is None:
+            self.app.status.config(text="Open an image first.")
+            return
+        lsb = forensics.lsb_plane(self.app.state_.working)
+        edges = canny_ops.canny(lsb,
+                                self.fcanny_lo.get(),
+                                self.fcanny_hi.get())
+        show_image(self.app, edges, title="Canny on LSB plane")
+
+    def _cmd_canny_plane(self) -> None:
+        if self.app.state_.working is None:
+            self.app.status.config(text="Open an image first.")
+            return
+        plane = bitplanes.bit_plane(self.app.state_.working,
+                                    self.bp_k.get())
+        edges = canny_ops.canny(plane,
+                                self.fcanny_lo.get(),
+                                self.fcanny_hi.get())
+        show_image(self.app, edges,
+                   title=f"Canny on bit plane {int(self.bp_k.get())}")
 
     # ==================================================================
     # Apply helper (used by Attack tab)

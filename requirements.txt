@@ -1,5 +1,7 @@
-numpy>=1.24
-opencv-python>=4.8
-scipy>=1.10
-matplotlib>=3.7
-Pillow>=10.0
+docx==0.2.4
+matplotlib==3.10.9
+numpy==2.4.6
+opencv_python==4.13.0.90
+Pillow==12.2.0
+reportlab==4.5.1
+scipy==1.17.1
